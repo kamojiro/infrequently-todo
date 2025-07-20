@@ -16,11 +16,15 @@ infrequently-todo
 │   ├── assets
 │   │   └── react.svg
 │   ├── components
-│   │   └── AddTaskForm.tsx
+│   │   ├── AddTaskForm.tsx
+│   │   ├── RandomTask.tsx
+│   │   └── TaskDetail.tsx
 │   ├── index.css
 │   ├── lib
 │   │   └── supabaseClient.ts
 │   ├── main.tsx
+│   ├── types
+│   │   └── index.ts
 │   └── vite-env.d.ts
 ├── tsconfig.json
 └── vite.config.js
@@ -188,12 +192,14 @@ export default defineConfig([
 
 ```tsx
 import AddTaskForm from "./components/AddTaskForm";
+import RandomTask from "./components/RandomTask";
 
 function App() {
   return (
     <div className="max-w-xl mx-auto my-10 p-4">
       <h1 className="text-2xl font-bold mb-4">Infrequently Todo List</h1>
       <AddTaskForm />
+      <RandomTask />
     </div>
   );
 }
@@ -213,24 +219,7 @@ export default App;
 ```tsx
 import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
-
-// タスクの型定義（Supabaseのスキーマに基づく）
-interface Task {
-  id: string; // uuid
-  title: string;
-  description: string | null;
-  interest_score: number;
-  created_at: string;
-  updated_at: string;
-}
-
-// 進捗の型定義
-interface Progress {
-  id: string;
-  task_id: string;
-  note: string | null;
-  created_at: string;
-}
+import {Task, Progress} from "../types";
 
 // コンポーネントのProps型定義
 interface AddTaskFormProps {
@@ -422,6 +411,187 @@ export default function AddTaskForm({ onTaskAdded }: AddTaskFormProps) {
 
 ```
 
+`infrequently-todo/src/components/RandomTask.tsx`:
+
+```tsx
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
+import type { Task } from "../types";
+import TaskDetail from "./TaskDetail";
+
+export default function RandomTask() {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [currentTask, setCurrentTask] = useState<Task | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // タスク全件取得
+  const fetchTasks = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from("tasks").select("*");
+    if (!error && data) {
+      setTasks(data);
+      if (data.length > 0) {
+        setCurrentTask(data[Math.floor(Math.random() * data.length)]);
+      } else {
+        setCurrentTask(null);
+      }
+    }
+    setLoading(false);
+  };
+
+  // 最初に1回だけ取得
+  useEffect(() => {
+    fetchTasks();
+  }, []);
+
+  // 別のタスクをランダム表示
+  const showAnotherTask = () => {
+    if (tasks.length > 1) {
+      let newTask: Task;
+      do {
+        newTask = tasks[Math.floor(Math.random() * tasks.length)];
+      } while (newTask.id === currentTask?.id && tasks.length > 1);
+      setCurrentTask(newTask);
+    }
+  };
+
+  const [showDetail, setShowDetail] = useState(false);
+
+return (
+    <div className="my-6">
+      <button
+        className="mb-4 px-4 py-2 bg-blue-100 text-blue-800 rounded hover:bg-blue-200"
+        onClick={showAnotherTask}
+        disabled={loading || tasks.length < 2}
+      >
+        {loading ? "読み込み中..." : "別のタスクを表示"}
+      </button>
+
+      {currentTask ? (
+        <div
+          className="p-4 border rounded shadow-sm bg-white cursor-pointer hover:shadow-md transition"
+          onClick={() => setShowDetail(true)}
+        >
+          <div className="font-semibold text-lg mb-1">{currentTask.title}</div>
+          {currentTask.description && (
+            <div className="text-gray-600">{currentTask.description}</div>
+          )}
+        </div>
+      ) : (
+        <div className="text-gray-400">タスクがありません</div>
+      )}
+
+      {showDetail && currentTask && (
+        <TaskDetail task={currentTask} onClose={() => setShowDetail(false)} />
+      )}
+    </div>
+  );
+}
+
+```
+
+`infrequently-todo/src/components/TaskDetail.tsx`:
+
+```tsx
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
+import type { Task, Progress } from "../types";
+
+interface TaskDetailProps {
+  task: Task;
+  onClose: () => void;
+}
+
+export default function TaskDetail({ task, onClose }: TaskDetailProps) {
+  const [progressList, setProgressList] = useState<Progress[]>([]);
+  const [note, setNote] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // 進捗履歴を取得
+  const fetchProgress = async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from("progress")
+      .select("*")
+      .eq("task_id", task.id)
+      .order("created_at", { ascending: false });
+    setProgressList(data ?? []);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchProgress();
+    // eslint-disable-next-line
+  }, [task.id]);
+
+  // 進捗を追加
+  const addProgress = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!note.trim()) return;
+    setLoading(true);
+    await supabase.from("progress").insert([
+      {
+        task_id: task.id,
+        note: note.trim(),
+      },
+    ]);
+    setNote("");
+    fetchProgress();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md relative">
+        <button
+          className="absolute right-4 top-4 text-gray-400 hover:text-gray-700"
+          onClick={onClose}
+        >
+          ×
+        </button>
+        <h2 className="text-xl font-bold mb-2">{task.title}</h2>
+        <div className="text-gray-600 mb-4">{task.description}</div>
+
+        <form onSubmit={addProgress} className="mb-4">
+          <textarea
+            className="w-full border rounded p-2 mb-2"
+            placeholder="進捗やメモを記録"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={2}
+            maxLength={300}
+            disabled={loading}
+          />
+          <button
+            type="submit"
+            className="px-4 py-2 bg-blue-500 text-white rounded"
+            disabled={loading || !note.trim()}
+          >
+            進捗を記録
+          </button>
+        </form>
+
+        <h3 className="font-semibold mb-2">進捗履歴</h3>
+        {progressList.length === 0 ? (
+          <div className="text-gray-400">まだ進捗はありません</div>
+        ) : (
+          <ul className="space-y-2 max-h-52 overflow-y-auto">
+            {progressList.map((p) => (
+              <li key={p.id} className="border-b pb-1 text-sm">
+                <span className="text-gray-500 mr-2">
+                  {new Date(p.created_at).toLocaleString()}
+                </span>
+                {p.note}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+```
+
 `infrequently-todo/src/index.css`:
 
 ```css
@@ -492,6 +662,27 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <App />
   </React.StrictMode>,
 );
+
+```
+
+`infrequently-todo/src/types/index.ts`:
+
+```ts
+export interface Task {
+  id: string;
+  title: string;
+  description: string | null;
+  interest_score: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Progress {
+  id: string;
+  task_id: string;
+  note: string | null;
+  created_at: string;
+}
 
 ```
 
