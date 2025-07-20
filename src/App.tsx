@@ -1,14 +1,38 @@
-import AddTaskForm from "./components/AddTaskForm";
-import RandomTask from "./components/RandomTask";
+import {
+  RouterProvider,
+  createBrowserRouter,
+  Link,
+  Outlet,
+} from "react-router";
 
-function App() {
+import AddTaskForm from "./components/AddTaskForm";
+import RandomTasks from "./components/RandomTasks";
+import TaskList from "./components/TaskList";
+
+function Layout() {
   return (
-    <div className="max-w-xl mx-auto my-10 p-4">
-      <h1 className="text-2xl font-bold mb-4">Infrequently Todo List</h1>
+    <>
+      <nav>
+        <Link to="/">おすすめ</Link>
+        <Link to="/list" className="ml-4">一覧</Link>
+      </nav>
       <AddTaskForm />
-      <RandomTask />
-    </div>
+      <Outlet /> {/* ← ここが子ルート表示位置！ */}
+    </>
   );
 }
 
-export default App;
+const router = createBrowserRouter([
+  {
+    path: "/",
+    element: <Layout />, // ← ここで親レイアウトを使う
+    children: [
+      { path: "/", element: <RandomTasks /> },
+      { path: "/list", element: <TaskList /> },
+    ],
+  },
+]);
+
+export default function App() {
+  return <RouterProvider router={router} />;
+}
