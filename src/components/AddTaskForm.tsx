@@ -1,23 +1,6 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
-
-// タスクの型定義（Supabaseのスキーマに基づく）
-interface Task {
-  id: string; // uuid
-  title: string;
-  description: string | null;
-  interest_score: number;
-  created_at: string;
-  updated_at: string;
-}
-
-// 進捗の型定義
-interface Progress {
-  id: string;
-  task_id: string;
-  note: string | null;
-  created_at: string;
-}
+import {Task, Progress} from "../types";
 
 // コンポーネントのProps型定義
 interface AddTaskFormProps {
